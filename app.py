@@ -1,17 +1,17 @@
 import os
-import json
 import random
-from flask import Flask, render_template, request, send_file
+import json
+from flask import Flask, request, render_template, send_file
 from openai import OpenAI
-from io import BytesIO
 
 app = Flask(__name__)
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-client = OpenAI(api_key=OPENAI_API_KEY)
 
 with open("telegram.json", "r") as f:
     model_handles = json.load(f)
+
+client = OpenAI(api_key=OPENAI_API_KEY)
 
 CTA_OPTIONS = [
     "tele 👉", "tg:", "telegram:", "teleme:", "telegrm:", "tele.", "teleg:", "tele📥:"
@@ -26,7 +26,7 @@ def generate_bio(model: str, city: str) -> str:
         return "❌ Model not found in telegram.json."
 
     cta = random.choice(CTA_OPTIONS)
-    obfuscated = obfuscate(handle)
+    obfuscated_handle = obfuscate(handle)
 
     prompt = (
         f"You are an AI that writes long-form Tinder bios designed to drive traffic to the middle of the profile,\n"
@@ -37,7 +37,7 @@ def generate_bio(model: str, city: str) -> str:
         f"- Is between 425–475 characters\n"
         f"- Uses lowercase and emotional hooks\n"
         f"- Guides the reader toward the Telegram handle\n"
-        f"- Ends with something like: {cta};{obfuscated}\n\n"
+        f"- Ends with something like: {cta};{obfuscated_handle}\n\n"
         f"Important: Do not mention OnlyFans. Write casually with human imperfections.\n\n"
         f"Now write the bio:"
     )
@@ -51,21 +51,16 @@ def generate_bio(model: str, city: str) -> str:
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        model = request.form["model"]
-        city = request.form["city"]
+        model = request.form.get("model")
+        city = request.form.get("city")
+        if not model or not city:
+            return "Missing model or city", 400
         bio = generate_bio(model, city)
-
-        bio_file = BytesIO()
-        bio_file.write(bio.encode("utf-8"))
-        bio_file.seek(0)
-        return send_file(
-            bio_file,
-            mimetype="text/plain",
-            as_attachment=True,
-            download_name=f"{model}_{city}_bio.txt"
-        )
-
-    return render_template("index.html")
+        output_path = "generated_bio.txt"
+        with open(output_path, "w") as f:
+            f.write(bio)
+        return send_file(output_path, as_attachment=True)
+    return render_template("form.html")
 
 if __name__ == "__main__":
-    app.run()
+    app.run(debug=True)
